@@ -1,0 +1,1137 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>电动车进电梯智能阻车预警系统</title>
+<style>
+  :root{
+    --bg:#f5f8fb; --card:#ffffff; --line:#e3ecf4;
+    --blue:#3b82f6; --blue-bg:#eff6ff; --blue-line:#bfdbfe;
+    --text:#1e293b; --text2:#64748b; --text3:#94a3b8;
+    --red:#ef4444; --red-bg:#fef2f2; --amber:#f59e0b; --amber-bg:#fffbeb;
+    --green:#10b981; --green-bg:#ecfdf5; --purple:#8b5cf6; --purple-bg:#f5f3ff;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:var(--bg);color:var(--text);
+    font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
+    font-size:14px;min-height:100vh;display:flex;flex-direction:column}
+  svg.ic{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.8;
+    stroke-linecap:round;stroke-linejoin:round;flex:none}
+
+  /* ---------- 顶栏 ---------- */
+  header{background:var(--card);border-bottom:1px solid var(--line);
+    padding:10px 20px;display:flex;align-items:center;gap:12px}
+  header .logo{width:34px;height:34px;border-radius:9px;background:var(--blue-bg);
+    display:flex;align-items:center;justify-content:center;color:var(--blue)}
+  header .logo svg{width:20px;height:20px}
+  header h1{font-size:16px;font-weight:600}
+  header .sub{font-size:12px;color:var(--text2);margin-top:1px}
+  header .badge{margin-left:auto;display:flex;align-items:center;gap:8px}
+  .chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;
+    border-radius:999px;font-size:12px;border:1px solid var(--blue-line);
+    background:var(--blue-bg);color:#2563eb;max-width:340px;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:var(--green);
+    animation:pulse 2s infinite}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+
+  /* ---------- 模式切换 ---------- */
+  .modeTabs{display:flex;gap:6px;background:#f1f5f9;border-radius:10px;padding:3px;
+    margin:10px 20px 0;max-width:1440px;width:calc(100% - 40px);margin-left:auto;margin-right:auto}
+  .modeTab{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
+    padding:9px 6px;border-radius:8px;border:none;background:transparent;cursor:pointer;
+    font-size:13px;color:var(--text2);transition:.15s;min-height:44px}
+  .modeTab:hover{color:var(--text);background:rgba(255,255,255,.7)}
+  .modeTab.on{background:var(--card);color:var(--blue);font-weight:600;
+    box-shadow:0 1px 3px rgba(15,23,42,.08)}
+  .modeTab svg{width:15px;height:15px}
+
+  /* ---------- 主体 ---------- */
+  main{flex:1;display:flex;gap:14px;padding:14px 20px;align-items:stretch;
+    max-width:1440px;width:100%;margin:0 auto}
+  @media (max-width:980px){
+    main{flex-direction:column;padding:10px 12px}
+    header{padding:10px 12px}
+    .modeTabs{width:calc(100% - 24px);padding:3px}
+    footer{padding:8px 12px}
+  }
+
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;
+    box-shadow:0 1px 3px rgba(15,23,42,.04)}
+
+  /* 左:画布区 */
+  #left{flex:1.7;display:flex;flex-direction:column;overflow:hidden}
+  #left .head{display:flex;align-items:center;gap:10px;padding:12px 16px;
+    border-bottom:1px solid var(--line);flex-wrap:wrap}
+  #left .head .title{font-weight:600}
+  #left .head .tools{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .btn{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;
+    border-radius:9px;border:1px solid var(--line);background:#fff;cursor:pointer;
+    font-size:13px;color:var(--text);transition:.15s;min-height:38px}
+  .btn:hover{border-color:var(--blue);color:var(--blue);background:var(--blue-bg)}
+  .btn.primary{background:var(--blue);border-color:var(--blue);color:#fff}
+  .btn.primary:hover{background:#2563eb}
+  .btn.danger{background:var(--red);border-color:var(--red);color:#fff}
+  .btn:disabled{opacity:.5;cursor:not-allowed}
+  .btn.active{background:var(--green);border-color:var(--green);color:#fff}
+
+  #canvasWrap{flex:1;position:relative;display:flex;align-items:center;
+    justify-content:center;padding:14px;min-height:380px;background:
+    repeating-conic-gradient(#f8fafc 0% 25%, #f2f6fa 0% 50%) 0 0/22px 22px;overflow:hidden}
+  #canvas{max-width:100%;max-height:560px;border-radius:8px;display:none;
+    box-shadow:0 2px 10px rgba(15,23,42,.10)}
+  #videoCanvas{max-width:100%;max-height:560px;border-radius:8px;display:none;
+    box-shadow:0 2px 10px rgba(15,23,42,.10)}
+  #empty{position:absolute;inset:14px;border:2px dashed #cbd8e6;border-radius:10px;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    gap:10px;color:var(--text3);cursor:pointer;transition:.15s;background:rgba(255,255,255,.6);
+    text-align:center;padding:20px}
+  #empty:hover{border-color:var(--blue);color:var(--blue)}
+  #empty .big{width:44px;height:44px;border-radius:12px;background:var(--blue-bg);
+    display:flex;align-items:center;justify-content:center;color:var(--blue)}
+  #empty .big svg{width:22px;height:22px}
+  #empty .hint{font-size:13px}
+  #empty .sub{font-size:12px;color:var(--text3)}
+  #loading{position:absolute;inset:0;border-radius:10px;background:rgba(255,255,255,.72);
+    backdrop-filter:blur(4px);display:none;flex-direction:column;gap:10px;
+    align-items:center;justify-content:center;color:var(--text2);font-size:13px;z-index:5}
+  .spin{width:26px;height:26px;border:3px solid var(--blue-line);border-top-color:var(--blue);
+    border-radius:50%;animation:rot .8s linear infinite}
+  @keyframes rot{to{transform:rotate(360deg)}}
+
+  #legend{display:none;padding:10px 16px;border-top:1px solid var(--line);
+    font-size:12px;color:var(--text2);flex-wrap:wrap;gap:14px}
+  #legend span{display:inline-flex;align-items:center;gap:5px}
+  #legend i{width:14px;height:9px;border-radius:2px;display:inline-block}
+
+  /* 视频控制条 */
+  .videoCtrl{display:none;align-items:center;gap:10px;padding:10px 16px;
+    border-top:1px solid var(--line);flex-wrap:wrap}
+  .videoCtrl .info{font-size:12px;color:var(--text2);flex:1;min-width:120px}
+  .videoCtrl input[type=range]{width:160px;accent-color:var(--blue)}
+
+  /* 批量进度条 */
+  #batchProgress{display:none;padding:12px 16px;border-top:1px solid var(--line)}
+  #batchProgress .bar{height:8px;background:#e3ecf4;border-radius:4px;overflow:hidden;margin-bottom:8px}
+  #batchProgress .bar .fill{height:100%;background:var(--blue);border-radius:4px;
+    transition:width .3s;width:0%}
+  #batchProgress .txt{font-size:12px;color:var(--text2);display:flex;justify-content:space-between}
+
+  /* 右:判定面板 */
+  #right{flex:1;display:flex;flex-direction:column;overflow:hidden;max-width:520px}
+  @media (max-width:980px){#right{max-width:none}}
+  #right .head{padding:12px 16px;border-bottom:1px solid var(--line);
+    display:flex;align-items:center;gap:8px;font-weight:600}
+  #right .head .live{margin-left:auto;font-size:11px;color:var(--text3);font-weight:400}
+
+  #verdictBox{padding:16px;overflow-y:auto;flex:1}
+  .empty-verdict{color:var(--text3);text-align:center;padding:60px 20px;font-size:13px;
+    display:flex;flex-direction:column;gap:8px;align-items:center}
+  .empty-verdict svg{width:30px;height:30px;opacity:.4}
+
+  .lv{border-radius:12px;padding:14px 16px;margin-bottom:14px;
+    display:flex;align-items:center;gap:12px;border:1px solid transparent}
+  .lv .emoji{width:42px;height:42px;border-radius:11px;display:flex;
+    align-items:center;justify-content:center;color:#fff;flex:none}
+  .lv .emoji svg{width:24px;height:24px}
+  .lv .name{font-size:19px;font-weight:700;line-height:1.15}
+  .lv .tag{display:inline-block;font-size:11px;padding:2px 8px;border-radius:6px;
+    background:rgba(255,255,255,.75);margin-left:8px;vertical-align:2px;font-weight:600}
+  .lv .sum{font-size:12.5px;margin-top:4px;opacity:.92;line-height:1.45}
+  .lv.high{background:var(--red-bg);border-color:#fecaca;color:#b91c1c}
+  .lv.high .emoji{background:var(--red)}
+  .lv.low{background:var(--amber-bg);border-color:#fde68a;color:#b45309}
+  .lv.low .emoji{background:var(--amber)}
+  .lv.safe{background:var(--green-bg);border-color:#a7f3d0;color:#047857}
+  .lv.safe .emoji{background:var(--green)}
+
+  .counts{display:flex;gap:8px;margin-bottom:14px}
+  .counts .c{flex:1;background:#f8fafc;border:1px solid var(--line);border-radius:10px;
+    padding:8px 6px;text-align:center}
+  .counts .c b{display:block;font-size:17px}
+  .counts .c span{font-size:11px;color:var(--text2)}
+  .counts .c.warn b{color:var(--red)}
+  .counts .c.info b{color:var(--blue)}
+  .counts .c.ok b{color:var(--green)}
+
+  .sec{margin-bottom:14px}
+  .sec .st{display:flex;align-items:center;gap:7px;font-weight:600;
+    font-size:13px;margin-bottom:8px;color:var(--text)}
+  .sec .st svg{color:var(--blue)}
+  .ev{display:flex;gap:9px;padding:9px 11px;background:#f8fafc;border:1px solid var(--line);
+    border-radius:9px;margin-bottom:6px;font-size:12.5px;line-height:1.55;color:#334155}
+  .ev svg{color:var(--blue);margin-top:1px}
+  .ev.dim svg{color:var(--text3)} .ev.dim{color:var(--text2);background:#fbfcfe}
+
+  /* 阈值控制 */
+  .thresh{background:var(--blue-bg);border:1px solid var(--blue-line);border-radius:11px;
+    padding:12px 14px;margin-bottom:14px}
+  .thresh .row{display:flex;align-items:center;gap:10px}
+  .thresh label{font-size:12.5px;font-weight:600;color:#1d4ed8;display:flex;
+    align-items:center;gap:6px;flex:none}
+  .thresh input[type=range]{flex:1;accent-color:var(--blue)}
+  .thresh .val{font-size:13px;font-weight:700;color:var(--blue);min-width:42px;text-align:right}
+  .thresh .note{font-size:11px;color:var(--text2);margin-top:6px;line-height:1.5}
+  .thresh .note b{color:#1d4ed8}
+
+  .actions{display:flex;gap:8px;flex-wrap:wrap}
+  .act{flex:1;min-width:130px;border:1px solid var(--line);background:#fff;
+    border-radius:10px;padding:10px 12px;cursor:pointer;text-align:left;
+    font-size:12.5px;color:var(--text);transition:.15s}
+  .act:hover{border-color:var(--blue);background:var(--blue-bg)}
+  .act b{display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:12.5px}
+  .act b svg{color:var(--blue)}
+
+  /* 批量结果表 */
+  .batchTable{width:100%;border-collapse:collapse;font-size:12px;margin-top:10px}
+  .batchTable th{background:#f1f5f9;padding:8px 6px;text-align:left;font-weight:600;
+    border-bottom:2px solid var(--line);white-space:nowrap}
+  .batchTable td{padding:7px 6px;border-bottom:1px solid var(--line);color:var(--text2)}
+  .batchTable tr:hover td{background:#f8fafc}
+  .batchTable .lvBadge{display:inline-block;padding:2px 8px;border-radius:6px;
+    font-size:11px;font-weight:600}
+  .lvBadge.high{background:var(--red-bg);color:#b91c1c}
+  .lvBadge.low{background:var(--amber-bg);color:#b45309}
+  .lvBadge.safe{background:var(--green-bg);color:#047857}
+
+  footer{border-top:1px solid var(--line);background:var(--card);padding:8px 20px;
+    font-size:11.5px;color:var(--text3);display:flex;gap:16px;flex-wrap:wrap}
+  footer b{color:var(--text2);font-weight:600}
+
+  /* ---------- 毛玻璃弹窗 ---------- */
+  #mask{position:fixed;inset:0;background:rgba(15,23,42,.35);backdrop-filter:blur(6px);
+    display:none;align-items:center;justify-content:center;z-index:50;padding:24px}
+  #mask.on{display:flex}
+  .modal{background:rgba(255,255,255,.88);backdrop-filter:blur(18px);
+    border:1px solid rgba(255,255,255,.9);border-radius:16px;max-width:520px;width:100%;
+    box-shadow:0 20px 60px rgba(15,23,42,.25);overflow:hidden;
+    animation:pop .18s ease-out}
+  @keyframes pop{from{transform:scale(.94);opacity:0}to{transform:scale(1);opacity:1}}
+  .modal .mh{display:flex;align-items:center;gap:8px;padding:14px 18px;
+    border-bottom:1px solid var(--line);font-weight:600;font-size:14px}
+  .modal .mh svg{color:var(--blue)}
+  .modal .mh .x{margin-left:auto;cursor:pointer;color:var(--text3);
+    width:26px;height:26px;border-radius:7px;display:flex;align-items:center;
+    justify-content:center}
+  .modal .mh .x:hover{background:#f1f5f9;color:var(--text)}
+  .modal .mb{padding:16px 18px;font-size:13px;line-height:1.8;color:#334155;
+    max-height:60vh;overflow-y:auto}
+  .modal .mb .qq{background:var(--blue-bg);border-radius:10px;padding:10px 13px;
+    margin-top:10px;color:#1d4ed8;line-height:1.7}
+  .modal .mb .qq::before{content:"💬 "}
+
+  #toast{position:fixed;left:50%;top:18px;transform:translateX(-50%) translateY(-80px);
+    background:rgba(15,23,42,.88);color:#fff;padding:9px 18px;border-radius:10px;
+    font-size:13px;transition:.25s;z-index:99}
+  #toast.on{transform:translateX(-50%) translateY(0)}
+
+  /* ---------- 手机端增强 ---------- */
+  @media (max-width:980px){
+    .modeTab{font-size:12px;padding:10px 4px}
+    .modeTab span.t{display:none}   /* 手机上只显示图标+短名 */
+    header h1{font-size:14px}
+    header .sub{font-size:11px}
+    .chip{max-width:200px;font-size:11px}
+    #canvasWrap{min-height:280px}
+    .btn{padding:8px 12px;font-size:12px;min-height:44px}   /* 触控目标≥44px */
+    .act{min-width:100px}
+    .lv .name{font-size:16px}
+    .lv .emoji{width:36px;height:36px}
+    footer{font-size:10.5px;gap:10px}
+    #left .head .tools{margin-left:0;width:100%}
+    #left .head .tools .btn{flex:1;justify-content:center}
+  }
+  @media (max-width:520px){
+    .modeTab{flex-direction:column;gap:2px;font-size:10px;min-height:52px}
+    .counts{gap:5px}
+    .counts .c b{font-size:14px}
+    .counts .c span{font-size:10px}
+    .thresh .note{font-size:10px}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ 图标库 ============ -->
+<svg xmlns="http://www.w3.org/2000/svg" style="position:absolute;width:0;height:0;overflow:hidden" aria-hidden="true">
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path d="M12 16V4m0 0l-4 4m4-4l4 4"/><path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3"/></symbol>
+  <symbol id="i-dice" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="15" r="1.1" fill="currentColor" stroke="none"/><circle cx="15" cy="9" r="1.1" fill="currentColor" stroke="none"/><circle cx="9" cy="15" r="1.1" fill="currentColor" stroke="none"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/><path d="M12 10v4m0 3v.1"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8.5 12.5l2.5 2.5 4.5-5"/></symbol>
+  <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="7" r="3.5"/><path d="M5 21c0-4 3-6.5 7-6.5s7 2.5 7 6.5"/></symbol>
+  <symbol id="i-bike" viewBox="0 0 24 24"><circle cx="6" cy="17" r="3.5"/><circle cx="18" cy="17" r="3.5"/><path d="M6 17l4-7h5l3 7M10 10h4l1.5-3"/></symbol>
+  <symbol id="i-ebike" viewBox="0 0 24 24"><circle cx="6" cy="17" r="3.5"/><circle cx="18" cy="17" r="3.5"/><path d="M6 17l4-7h5l3 7M10 10h4l1.5-3"/><path d="M13 3l2 2-2 2"/></symbol>
+  <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s7-6.5 7-11.5A7 7 0 005 9.5C5 14.5 12 21 12 21z"/><circle cx="12" cy="9.5" r="2.5"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h7M9 16h7"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0014 0M12 18v3"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0112 0v5l1.5 2.5H4.5z"/><path d="M10 21a2 2 0 004 0"/></symbol>
+  <symbol id="i-lift" viewBox="0 0 24 24"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M12 6l2.5 3h-5zM12 18l2.5-3h-5z"/><path d="M9 12h6"/></symbol>
+  <symbol id="i-filter" viewBox="0 0 24 24"><path d="M4 5h16l-6 7v6l-4 2v-8z"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-6.5 10-6.5S22 12 22 12s-3.5 6.5-10 6.5S2 12 2 12z"/><circle cx="12" cy="12" r="2.8"/></symbol>
+  <symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V5a1 1 0 011-1h3M20 8V5a1 1 0 00-1-1h-3M4 16v3a1 1 0 001 1h3M20 16v3a1 1 0 01-1 1h-3"/><path d="M3 12h18"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="M16 10l5-3v10l-5-3"/></symbol>
+  <symbol id="i-camera" viewBox="0 0 24 24"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 5l12 7-12 7z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M7 5v14M17 5v14"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 3v12m0 0l-4-4m4 4l4-4"/><path d="M4 17v2a1 1 0 001 1h14a1 1 0 001-1v-2"/></symbol>
+  <symbol id="i-stack" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-img" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><circle cx="8.5" cy="10" r="1.5"/><path d="M21 15l-5-5-5 5-3-3-5 5"/></symbol>
+</svg>
+
+<header>
+  <div class="logo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+  <div>
+    <h1>电动车进电梯智能阻车预警系统</h1>
+    <div class="sub">基于 YOLO11 的可解释目标检测 · 人机交互阈值调控 · 赛道五作品</div>
+  </div>
+  <div class="badge">
+    <span class="chip"><span class="dot"></span><span id="modelChip">模型加载中…</span></span>
+  </div>
+</header>
+
+<!-- ============ 模式切换 ============ -->
+<div class="modeTabs">
+  <button class="modeTab on" data-mode="image" onclick="switchMode('image')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><use href="#i-img"/></svg><span class="t">单张图片</span>图片</button>
+  <button class="modeTab" data-mode="video" onclick="switchMode('video')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><use href="#i-video"/></svg><span class="t">视频抽帧</span>视频</button>
+  <button class="modeTab" data-mode="camera" onclick="switchMode('camera')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><use href="#i-camera"/></svg><span class="t">实时摄像头</span>摄像头</button>
+  <button class="modeTab" data-mode="batch" onclick="switchMode('batch')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><use href="#i-stack"/></svg><span class="t">批量分析</span>批量</button>
+</div>
+
+<main>
+  <!-- ============ 左:检测画布 ============ -->
+  <section id="left" class="card">
+    <div class="head">
+      <span class="title" id="modeTitle">监控画面分析</span>
+      <div class="tools" id="imageTools">
+        <button class="btn" id="btnSample" title="从测试集随机取一张真实监控图">
+          <svg class="ic"><use href="#i-dice"/></svg>随机示例</button>
+        <button class="btn primary" id="btnUpload">
+          <svg class="ic"><use href="#i-upload"/></svg>上传图片</button>
+        <button class="btn" id="btnCapture" title="手机端:调起原生相机拍照检测;电脑端:选择图片">
+          <svg class="ic"><use href="#i-camera"/></svg>拍照检测</button>
+        <input type="file" id="fileInput" accept="image/*" hidden>
+        <input type="file" id="captureInput" accept="image/*" capture="environment" hidden>
+      </div>
+      <!-- 视频模式工具 -->
+      <div class="tools" id="videoTools" style="display:none">
+        <button class="btn primary" id="btnVideoUpload">
+          <svg class="ic"><use href="#i-upload"/></svg>上传视频</button>
+        <input type="file" id="videoInput" accept="video/*" hidden>
+        <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:var(--text2)">
+          抽帧间隔 <input type="range" id="frameInterval" min="1" max="10" step="1" value="2"
+            style="width:80px;accent-color:var(--blue)"> <span id="intervalVal">2s</span>
+        </label>
+        <span style="font-size:10px;color:var(--text3)">v6</span>
+      </div>
+      <!-- 摄像头模式工具 -->
+      <div class="tools" id="cameraTools" style="display:none">
+        <button class="btn primary" id="btnCamStart">
+          <svg class="ic"><use href="#i-camera"/></svg>开启摄像头</button>
+        <button class="btn" id="btnCamStop" disabled>
+          <svg class="ic"><use href="#i-stop"/></svg>停止</button>
+        <button class="btn" id="btnCamFlip" disabled title="手机:切换前/后摄像头;电脑:切换设备">
+          <svg class="ic"><use href="#i-flip"/></svg>翻转</button>
+        <select id="camSelect" style="max-width:180px;font-size:12px;padding:6px 8px;
+          border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--text2);
+          cursor:pointer" title="选择摄像头(自动排除红外摄像头)">
+          <option value="">摄像头列表加载中…</option>
+        </select>
+        <span style="font-size:12px;color:var(--text2)" id="camFps">-</span>
+        <span style="font-size:10px;color:var(--text3)">v6</span>
+      </div>
+      <!-- 批量模式工具 -->
+      <div class="tools" id="batchTools" style="display:none">
+        <button class="btn primary" id="btnBatchSelect">
+          <svg class="ic"><use href="#i-stack"/></svg>选择多张图片</button>
+        <input type="file" id="batchInput" accept="image/*" multiple hidden>
+        <button class="btn" id="btnExportCsv" disabled>
+          <svg class="ic"><use href="#i-download"/></svg>导出CSV</button>
+        <button class="btn" id="btnExportJson" disabled>
+          <svg class="ic"><use href="#i-download"/></svg>导出JSON</button>
+      </div>
+    </div>
+    <div id="canvasWrap">
+      <div id="empty">
+        <div class="big" id="emptyIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><use href="#i-upload"/></svg></div>
+        <div class="hint" id="emptyHint">拖拽监控截图到此处,或点击选择图片</div>
+        <div class="sub" id="emptySub">也支持「随机示例」一键调取真实电梯监控图</div>
+      </div>
+      <canvas id="canvas"></canvas>
+      <canvas id="videoCanvas"></canvas>
+      <!-- 视频模式: video直接可见+原生控件, 检测框画在覆盖透明canvas上 -->
+      <div id="videoLayer" style="display:none;position:relative;max-width:100%;">
+        <video id="videoPlayer" playsinline controls preload="metadata" style="display:block;max-width:100%;max-height:560px;border-radius:8px;box-shadow:0 2px 10px rgba(15,23,42,.10)"></video>
+        <canvas id="videoBoxCanvas" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none"></canvas>
+      </div>
+      <!-- 摄像头模式: video直接可见显示(浏览器必定解码), 检测框画在覆盖透明canvas上 -->
+      <div id="camLayer" style="display:none;position:relative;max-width:100%;">
+        <video id="camVideo" playsinline muted autoplay style="display:block;max-width:100%;max-height:560px;border-radius:8px;box-shadow:0 2px 10px rgba(15,23,42,.10)"></video>
+        <canvas id="camBoxCanvas" style="position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none"></canvas>
+      </div>
+      <div id="loading"><div class="spin"></div><div id="loadText">模型推理中…</div></div>
+    </div>
+    <!-- 批量进度条 -->
+    <div id="batchProgress">
+      <div class="bar"><div class="fill" id="batchFill"></div></div>
+      <div class="txt"><span id="batchTxt">等待选择文件…</span><span id="batchPct">0%</span></div>
+    </div>
+    <div id="legend">
+      <span><i style="background:#ef4444"></i>电动车</span>
+      <span><i style="background:#3b82f6"></i>自行车</span>
+      <span><i style="background:#10b981"></i>乘客</span>
+      <span><i style="border:1.5px dashed #94a3b8"></i>低于阈值(已忽略)</span>
+      <span id="inferInfo" style="margin-left:auto;color:#94a3b8"></span>
+    </div>
+  </section>
+
+  <!-- ============ 右:判定面板 ============ -->
+  <section id="right" class="card">
+    <div class="head">
+      <svg class="ic" style="color:#3b82f6"><use href="#i-scan"/></svg>
+      <span>风险判定与决策解释</span>
+      <span class="live" id="liveTime"></span>
+    </div>
+    <div id="verdictBox">
+      <div class="empty-verdict">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><use href="#i-eye"/></svg>
+        <div>上传或选择监控画面后<br>这里将展示风险等级、证据链与处置建议</div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <span><b>车辆模型</b> <span id="ftWeights">-</span></span>
+  <span><b>人员模型</b> YOLO11n 官方预训练(COCO)</span>
+  <span><b>训练轮数</b> <span id="ftEpochs">-</span></span>
+  <span><b>推理耗时</b> <span id="ftSpeed">-</span></span>
+  <span style="margin-left:auto">本地离线运行 · 零云端依赖 · 界面与判定规则全透明</span>
+</footer>
+
+<!-- 弹窗 -->
+<div id="mask">
+  <div class="modal">
+    <div class="mh"><svg class="ic"><use href="#i-file"/></svg><span id="mTitle"></span>
+      <div class="x" onclick="closeModal()"><svg class="ic"><use href="#i-x"/></svg></div></div>
+    <div class="mb" id="mBody"></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+/* ================= 工具 ================= */
+const $ = s => document.querySelector(s);
+const ICON = id => `<svg class="ic"><use href="#i-${id}"/></svg>`;
+const ICONS = {ebike:'ebike', bicycle:'bike', person:'person', position:'pin',
+               policy:'file', filter:'filter', shield:'shield', mic:'mic',
+               bell:'bell', lift:'lift'};
+
+function toast(msg, dur){const t=$('#toast');t.textContent=msg;t.classList.add('on');
+  clearTimeout(t._timer); t._timer=setTimeout(()=>t.classList.remove('on'),dur||2200)}
+function openModal(title, html){$('#mTitle').textContent=title;$('#mBody').innerHTML=html;
+  $('#mask').classList.add('on')}
+function closeModal(){$('#mask').classList.remove('on')}
+$('#mask').addEventListener('click',e=>{if(e.target.id==='mask')closeModal()});
+
+setInterval(()=>{const d=new Date();
+  $('#liveTime').textContent=d.toLocaleTimeString('zh-CN',{hour12:false})},1000);
+
+/* ================= 状态加载 ================= */
+async function loadStatus(){
+  try{
+    const r = await fetch('/api/status'); const j = await r.json();
+    const short = j.ebike_weights.split('\\').slice(-3).join('\\');
+    $('#modelChip').textContent = `已就绪 · ${short}`;
+    $('#ftWeights').textContent = short;
+    $('#ftEpochs').textContent = j.epochs ? j.epochs+' 轮' : '未知';
+  }catch(e){ $('#modelChip').textContent='服务未就绪'; }
+}
+loadStatus();
+
+/* ================= 模式切换 ================= */
+let curMode = 'image';
+const MODE_CFG = {
+  image:  {title:'监控画面分析', hint:'拖拽监控截图到此处,或点击选择图片',
+           sub:'也支持「随机示例」一键调取真实电梯监控图', icon:'upload'},
+  video:  {title:'视频抽帧检测', hint:'上传电梯监控视频,系统自动抽帧检测',
+           sub:'支持 MP4/AVI/MOV 等常见格式', icon:'video'},
+  camera: {title:'实时摄像头检测', hint:'点击「开启摄像头」,用手机或电脑摄像头实时检测',
+           sub:'手机浏览器访问本页即可使用后置摄像头', icon:'camera'},
+  batch:  {title:'批量图片分析', hint:'选择多张电梯监控图,系统逐张检测并汇总',
+           sub:'检测完成后可导出 CSV/JSON 结果', icon:'stack'},
+};
+
+function switchMode(m){
+  // 清理前一个模式
+  if(curMode==='camera') stopCamera();
+  if(curMode==='video') stopVideoMode();
+
+  curMode = m;
+  document.querySelectorAll('.modeTab').forEach(b=>b.classList.toggle('on',b.dataset.mode===m));
+  const cfg = MODE_CFG[m];
+  $('#modeTitle').textContent = cfg.title;
+  $('#emptyHint').textContent = cfg.hint;
+  $('#emptySub').textContent = cfg.sub;
+  $('#emptyIcon').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><use href="#i-${cfg.icon}"/></svg>`;
+
+  // 工具栏切换
+  ['imageTools','videoTools','cameraTools','batchTools'].forEach(id=>
+    $('#'+id).style.display = 'none');
+  const toolMap = {image:'imageTools',video:'videoTools',camera:'cameraTools',batch:'batchTools'};
+  $('#'+toolMap[m]).style.display = 'flex';
+
+  // 画布/控制条切换
+  $('#canvas').style.display = 'none';
+  $('#videoCanvas').style.display = 'none';
+  $('#videoLayer').style.display = 'none';
+  $('#empty').style.display = 'flex';
+  $('#batchProgress').style.display = m==='batch' ? 'block' : 'none';
+  $('#legend').style.display = 'none';
+
+  if(m==='batch'){
+    $('#batchFill').style.width='0%';
+    $('#batchTxt').textContent='等待选择文件…';
+    $('#batchPct').textContent='0%';
+    $('#btnExportCsv').disabled = true;
+    $('#btnExportJson').disabled = true;
+  }
+  if(m==='video' || m==='camera'){
+    $('#videoCanvas').style.display = 'none';
+  }
+  if(m==='camera'){
+    loadCamDevices();   // 进入摄像头模式即枚举设备(排除红外)
+  }
+  // 恢复图片模式时显示原 canvas
+  if(m==='image'){
+    $('#canvas').style.display = curImg ? 'block' : 'none';
+    if(curImg) drawImage(curImg);
+    $('#legend').style.display = lastVerdict ? 'flex' : 'none';
+  }
+}
+// 模式空状态点击
+$('#empty').onclick=()=>{ if(curMode==='image')$('#fileInput').click(); };
+
+/* ================= 画布绘制(共用) ================= */
+const canvas = $('#canvas'), ctx = canvas.getContext('2d');
+const vCanvas = $('#videoCanvas'), vCtx = vCanvas.getContext('2d');
+let curImg = null;
+let lastVerdict = null;
+
+function boxLabelOn(c2d, W, x1,y1,x2,y2, conf, name, color, dashed=false){
+  const fs=Math.max(12,W/38), lw=Math.max(1.5,W/420);
+  c2d.save();
+  c2d.lineWidth=lw; c2d.strokeStyle=color;
+  if(dashed)c2d.setLineDash([lw*4,lw*3]);
+  c2d.strokeRect(x1,y1,x2-x1,y2-y1);
+  const label=`${name} ${Math.round(conf*100)}%`;
+  c2d.font=`600 ${fs}px system-ui,"Microsoft YaHei"`;
+  const tw=c2d.measureText(label).width, th=fs*1.25;
+  let ly=y1-th; if(ly<0)ly=y1;
+  c2d.fillStyle=color;
+  c2d.globalAlpha=dashed?0.75:0.92;
+  c2d.fillRect(x1,ly,tw+fs*0.9,th);
+  c2d.globalAlpha=1; c2d.fillStyle='#fff';
+  c2d.fillText(label,x1+fs*0.45,ly+th*0.78);
+  c2d.restore();
+}
+
+function drawBoxesOn(c2d, W, H, v){
+  const th = v.threshold;
+  for(const d of v.detections){
+    const active = d.conf>=th;
+    const name = d.cls==='ebike'?'电动车':'自行车';
+    const color = active ? (d.cls==='ebike'?'#ef4444':'#3b82f6') : '#94a3b8';
+    boxLabelOn(c2d, W, ...d.box, active?d.conf:d.conf,
+                active?name:(name+' 已忽略'), color, !active);
+  }
+  for(const p of v.persons){
+    boxLabelOn(c2d, W, ...p.box, p.conf, '乘客', '#10b981', false);
+  }
+}
+
+function drawImage(img){
+  canvas.width = img.naturalWidth; canvas.height = img.naturalHeight;
+  canvas.style.display='block'; $('#empty').style.display='none';
+  ctx.drawImage(img,0,0);
+}
+
+function drawVerdict(v){
+  if(!curImg)return;
+  ctx.drawImage(curImg,0,0);
+  drawBoxesOn(ctx, canvas.width, canvas.height, v);
+}
+
+/* ================= API 调用 ================= */
+async function detectFrame(dataUrl, threshold){
+  const r=await fetch('/api/detect',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({image:dataUrl, threshold:threshold||0.35})});
+  const j=await r.json();
+  if(!j.ok)throw new Error(j.msg||'检测失败');
+  return j.verdict;
+}
+
+async function detect(dataUrl){
+  $('#loading').style.display='flex'; $('#loadText').textContent='双模型推理中…';
+  const th = $('#thresh') ? +$('#thresh').value : 0.35;
+  try{
+    const v = await detectFrame(dataUrl, th);
+    lastVerdict=v;
+    renderVerdict(v);
+    drawVerdict(v);
+    $('#legend').style.display='flex';
+    $('#ftSpeed').textContent=(v.infer_ms/1000).toFixed(2)+' 秒';
+    $('#inferInfo').textContent=`推理 ${v.infer_ms}ms · ${v.img_size[0]}×${v.img_size[1]}`;
+  }catch(e){toast('检测失败:'+e.message)}
+  finally{$('#loading').style.display='none'}
+}
+
+async function reanalyze(){
+  if(!lastVerdict)return;
+  const r=await fetch('/api/analyze',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({detections:lastVerdict.detections, persons:lastVerdict.persons,
+                         threshold:+$('#thresh').value, img_size:lastVerdict.img_size})});
+  const j=await r.json();
+  if(j.ok){renderVerdict(j.verdict); drawVerdict(j.verdict)}
+}
+
+/* ================= 判定面板渲染 ================= */
+function renderVerdict(v){
+  const icon = {high:'alert',low:'bike',safe:'check'}[v.level];
+  const evHtml = v.evidence.map(e=>
+    `<div class="ev">${ICON(ICONS[e.icon]||'eye')}<div>${e.text}</div></div>`).join('');
+
+  $('#verdictBox').innerHTML = `
+    <div class="lv ${v.level}">
+      <div class="emoji">${ICON(icon)}</div>
+      <div>
+        <div class="name">${v.level_cn}<span class="tag" style="color:${v.level_color}">${v.level_tag}</span></div>
+        <div class="sum">${v.summary}</div>
+      </div>
+    </div>
+    <div class="counts">
+      <div class="c ${v.counts.ebike?'warn':''}"><b>${v.counts.ebike}</b><span>电动车</span></div>
+      <div class="c info"><b>${v.counts.bicycle}</b><span>自行车</span></div>
+      <div class="c info"><b>${v.counts.person}</b><span>乘客</span></div>
+      <div class="c ${v.counts.ignored?'ok':''}"><b>${v.counts.ignored}</b><span>已忽略弱目标</span></div>
+    </div>
+    <div class="thresh">
+      <div class="row">
+        <label>${ICON('filter')}判定阈值</label>
+        <input type="range" id="thresh" min="0.10" max="0.90" step="0.05" value="${v.threshold}">
+        <span class="val" id="threshVal">${Math.round(v.threshold*100)}%</span>
+      </div>
+      <div class="note">低于阈值的目标<b>不计入判定</b>(画面中显示为灰色虚线框)。阈值即人工干预接口:
+      物业可按需收紧(减少漏报)或放宽(减少误报),当前判定基于 <b>${Math.round(v.threshold*100)}%</b>。</div>
+    </div>
+    <div class="sec">
+      <div class="st">${ICON('eye')}判定证据链</div>${evHtml}
+    </div>
+    <div class="sec">
+      <div class="st">${ICON('bell')}处置建议</div>
+      <div class="actions">
+        ${v.advice.map((a,i)=>`<button class="act" onclick="showAdvice(${i})">
+          <b>${ICON(ICONS[a.icon]||'bell')}${a.title}</b>${a.text.slice(0,32)}…</button>`).join('')}
+        <button class="act" onclick="showPolicy()">
+          <b>${ICON('file')}法规依据</b>应急管理部令第5号 第三十七条…</button>
+      </div>
+    </div>`;
+  $('#thresh').addEventListener('input',()=>{
+    $('#threshVal').textContent=Math.round($('#thresh').value*100)+'%'});
+  $('#thresh').addEventListener('change',reanalyze);
+  window._advice=v.advice;
+  window._policy=v.policy;
+}
+window.showAdvice=i=>{const a=window._advice[i];
+  openModal(a.title,`<div>${a.text}</div>${a.title==='语音播报'?`<div class="qq">演示时由梯控音箱循环播报,音量随轿厢噪声自适应</div>`:''}`)};
+window.showPolicy=()=>{
+  openModal('法规与安全依据',`<div>${window._policy||''}</div><div class="qq">锂电池在密闭轿厢内热失控,数十秒内释放高温有毒烟气,并经电梯井形成"烟囱效应"——这是阻梯告警的物理依据。</div>`)};
+window._policy=null;
+
+/* ================= 模式一: 单张图片(原有) ================= */
+function loadImage(dataUrl){
+  const img=new Image();
+  img.onload=()=>{curImg=img;drawImage(img)};
+  img.src=dataUrl;
+}
+function readAsDataUrl(file){
+  const fr=new FileReader();
+  fr.onload=()=>{loadImage(fr.result);detect(fr.result)};
+  fr.readAsDataURL(file);
+}
+$('#btnUpload').onclick=()=>$('#fileInput').click();
+$('#fileInput').onchange=e=>{if(e.target.files[0])readAsDataUrl(e.target.files[0])};
+// 拍照检测: 手机端调起原生相机(capture=environment), 电脑端等同选图
+$('#btnCapture').onclick=()=>$('#captureInput').click();
+$('#captureInput').onchange=e=>{
+  const f=e.target.files[0];
+  if(f)readAsDataUrl(f);
+  e.target.value='';  // 清空以便重复拍摄
+};
+$('#canvasWrap').addEventListener('dragover',e=>{e.preventDefault();});
+$('#canvasWrap').addEventListener('drop',e=>{e.preventDefault();
+  const f=e.dataTransfer.files[0];
+  if(f&&f.type.startsWith('image/')&&curMode==='image')readAsDataUrl(f)});
+$('#btnSample').onclick=async()=>{
+  $('#loading').style.display='flex';$('#loadText').textContent='调取示例监控图…';
+  try{
+    const r=await fetch('/api/sample');const j=await r.json();
+    if(!j.ok)throw new Error(j.msg);
+    loadImage(j.image);
+    toast('已载入示例:'+j.filename.slice(0,26)+'…');
+    await detect(j.image);
+  }catch(e){toast('示例获取失败:'+e.message)}
+  finally{$('#loading').style.display='none'}
+};
+
+/* ================= 模式二: 视频抽帧检测 v6 (视频直接可见+原生控件) ================= */
+const videoPlayer = $('#videoPlayer');
+const videoLayer = $('#videoLayer');
+const videoBoxCanvas = $('#videoBoxCanvas');
+const videoBoxCtx = videoBoxCanvas.getContext('2d');
+let videoDetectTimer = null;
+let videoBusy = false;
+let lastVideoVerdict = null;
+
+$('#btnVideoUpload').onclick=()=>$('#videoInput').click();
+
+$('#videoInput').onchange=e=>{
+  const f=e.target.files[0];
+  if(!f)return;
+  if(videoPlayer.src){URL.revokeObjectURL(videoPlayer.src)}
+  videoPlayer.src=URL.createObjectURL(f);
+  videoPlayer.onloadedmetadata=()=>{
+    videoBoxCanvas.width=videoPlayer.videoWidth||640;
+    videoBoxCanvas.height=videoPlayer.videoHeight||480;
+    videoLayer.style.display='block';
+    $('#empty').style.display='none';
+    toast('视频已加载,点播放后自动抽帧检测');
+  };
+};
+
+// 播放状态驱动抽帧循环(原生控件控制播放/暂停/进度条)
+videoPlayer.onplay=()=>startVideoDetect();
+videoPlayer.onpause=()=>stopVideoDetect();
+videoPlayer.onended=()=>stopVideoDetect();
+
+$('#frameInterval').oninput=e=>{
+  $('#intervalVal').textContent = e.target.value + 's';
+  if(videoDetectTimer){stopVideoDetect(); startVideoDetect();}
+};
+
+function startVideoDetect(){
+  stopVideoDetect();
+  const interval = parseInt($('#frameInterval').value)||2;
+  videoDetectTimer = setInterval(async()=>{
+    if(videoBusy || videoPlayer.paused || videoPlayer.ended)return;
+    videoBusy=true;
+    try{
+      const vw=videoPlayer.videoWidth, vh=videoPlayer.videoHeight;
+      if(!vw)return;
+      // 抽当前帧送检(缩到640)
+      const tmp=document.createElement('canvas');
+      tmp.width=640; tmp.height=Math.round(640*vh/vw);
+      tmp.getContext('2d').drawImage(videoPlayer,0,0,tmp.width,tmp.height);
+      const v=await detectFrame(tmp.toDataURL('image/jpeg',0.85),
+        $('#thresh')?+$('#thresh').value:0.35);
+      lastVideoVerdict=v;
+      lastVerdict=v;
+      renderVerdict(v);
+      // 检测框画在覆盖透明画布上(视频元素原生控件直接显示画面)
+      videoBoxCtx.clearRect(0,0,vw,vh);
+      drawBoxesOn(videoBoxCtx, vw, vh, v);
+      $('#legend').style.display='flex';
+      $('#ftSpeed').textContent=(v.infer_ms/1000).toFixed(2)+' 秒';
+      $('#inferInfo').textContent=`视频抽帧检测 ${v.infer_ms}ms`;
+    }catch(e){console.warn('视频帧检测失败',e)}
+    finally{videoBusy=false}
+  }, interval*1000);
+}
+function stopVideoDetect(){
+  if(videoDetectTimer){clearInterval(videoDetectTimer);videoDetectTimer=null}
+}
+function stopVideoMode(){
+  stopVideoDetect();
+  videoPlayer.pause();
+  if(videoPlayer.src){URL.revokeObjectURL(videoPlayer.src);videoPlayer.src='';}
+  videoLayer.style.display='none';
+  lastVideoVerdict=null;
+  videoBoxCtx.clearRect(0,0,videoBoxCanvas.width,videoBoxCanvas.height);
+}
+
+
+/* ================= 模式三: 实时摄像头 v6 ================= */
+const camVideo = $('#camVideo');
+const camLayer = $('#camLayer');
+const camBoxCanvas = $('#camBoxCanvas');
+const camBoxCtx = camBoxCanvas.getContext('2d');
+const camSelect = $('#camSelect');
+let camStream = null;
+let camTimer = null;
+let camBusy = false;
+let camCount = 0;
+let camT0 = 0;
+let blackFrames = 0;
+let autoSwitched = false;   // 黑屏自动换设备只尝试一次
+
+const IR_RE = /ir[ _-]?cam|红外|infrared|windows hello|faceid|facetime/i;
+const isIrLabel = l => IR_RE.test(l||'');
+
+/* ---- 设备枚举(授权后 label 才可用,自动排除红外摄像头) ---- */
+async function loadCamDevices(){
+  try{
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    const cams = devices.filter(d=>d.kind==='videoinput');
+    camSelect.innerHTML='';
+    if(!cams.length){
+      camSelect.innerHTML='<option value="">未检测到摄像头</option>';
+      return;
+    }
+    const hasLabels = cams.some(d=>(d.label||'').trim());
+    const normal = cams.filter(d=>!isIrLabel(d.label));
+    const ir = cams.filter(d=>isIrLabel(d.label));
+    // 未授权时 label 为空,红外识别不了 —— 先全部列出;授权后会重新枚举精确识别
+    const ordered = (hasLabels && normal.length) ? [...normal, ...ir] : cams;
+    ordered.forEach((d,i)=>{
+      const opt=document.createElement('option');
+      opt.value=d.deviceId;
+      const isIr = hasLabels && isIrLabel(d.label);
+      opt.textContent = isIr
+        ? '[红外·勿选] '+(d.label||'').slice(0,20)
+        : (d.label||('摄像头 '+(i+1))).slice(0,28);
+      if(isIr) opt.disabled=true;
+      camSelect.appendChild(opt);
+    });
+  }catch(e){
+    camSelect.innerHTML='<option value="">设备列表获取失败</option>';
+  }
+}
+
+function camTrack(){ return camStream ? camStream.getVideoTracks()[0] : null; }
+
+/* ---- 统一启动入口: startCamera({facing:'user'/'environment'}) 或 startCamera({deviceId}) ---- */
+async function startCamera(opts={}){
+  if(camStream) stopCamera(true);
+  const isSecure = location.hostname==='localhost' || location.hostname==='127.0.0.1'
+                   || location.protocol==='https:';
+  if(!isSecure){
+    openModal('摄像头安全限制', `
+      <div><b>为什么摄像头开不了?</b></div>
+      <div style="margin-top:8px">浏览器安全策略规定:只有 <b>localhost</b> 或 <b>HTTPS</b> 页面才能调用摄像头接口。当前是 ${location.protocol}//${location.host},不满足条件。</div>
+      <div class="qq">①本机打开 <b>http://127.0.0.1:8300</b>;②手机打开 <b>https://电脑IP:8301</b>(首次点"高级→继续访问")。</div>`);
+    return;
+  }
+  try{
+    let videoConstraint;
+    if(opts.deviceId){
+      videoConstraint={deviceId:{exact:opts.deviceId}, width:{ideal:1280}, height:{ideal:720}};
+    }else if(opts.facing){
+      // 手机前后切换用 facingMode(ideal 兼容性最好,不支持时浏览器自动降级)
+      videoConstraint={facingMode:{ideal:opts.facing}, width:{ideal:1280}, height:{ideal:720}};
+    }else{
+      videoConstraint={width:{ideal:1280}, height:{ideal:720}};
+    }
+    camStream = await navigator.mediaDevices.getUserMedia({video:videoConstraint, audio:false});
+    camVideo.srcObject = camStream;
+    await camVideo.play();
+    await new Promise(res=>{
+      if(camVideo.readyState>=1) res();
+      else camVideo.onloadedmetadata=()=>res();
+    });
+
+    const track = camTrack();
+    const label = track ? track.label : '';
+    const settings = track ? track.getSettings() : {};
+
+    // 授权后 label 可用了 → 重新枚举,这次能准确识别红外
+    await loadCamDevices();
+    if(settings.deviceId){
+      const match=[...camSelect.options].find(o=>o.value===settings.deviceId);
+      if(match) camSelect.value=settings.deviceId;
+    }
+
+    // 自动避开红外摄像头(普通光下输出全黑)
+    if(isIrLabel(label)){
+      const alt=[...camSelect.options].find(o=>!o.disabled && o.value && o.value!==settings.deviceId);
+      if(alt){
+        toast('避开红外摄像头,自动切换: '+alt.textContent, 4000);
+        return startCamera({deviceId: alt.value});
+      }
+    }
+
+    const vw=camVideo.videoWidth||1280, vh=camVideo.videoHeight||720;
+    camBoxCanvas.width=vw; camBoxCanvas.height=vh;
+    camLayer.style.display='block';
+    $('#empty').style.display='none';
+    $('#btnCamStart').disabled=true;
+    $('#btnCamStop').disabled=false;
+    $('#btnCamFlip').disabled=false;
+    camCount=0; camT0=Date.now(); blackFrames=0; autoSwitched=false;
+    startCamDetect();
+    toast(`摄像头已开启 (${vw}×${vh}${label?' · '+label.slice(0,18):''})`, 3500);
+  }catch(e){
+    // v6: 错误一律持久弹窗(toast 几秒就消失容易漏看,导致"点了没反应")
+    const detail={
+      NotAllowedError:'浏览器或 Windows 拒绝了摄像头权限。<br><b>处理</b>:点击地址栏左侧的锁/相机图标 → 摄像头 → 允许;再检查 Windows设置 → 隐私和安全性 → 摄像物 → 应用权限中 Edge 的开关是否打开。',
+      NotReadableError:'摄像头被其他程序占用。<br><b>处理</b>:关闭微信/腾讯会议/相机App等占用摄像头的程序后重试。',
+      NotFoundError:'未检测到摄像头设备(台式机需外接USB摄像头)。',
+      OverconstrainedError:'指定的摄像头不可用。<br><b>处理</b>:在右侧下拉框里换一个摄像头。',
+    }[e.name] || '未知错误,请把下方"错误类型"截图发给智能体排查。';
+    openModal('摄像头开启失败 — 诊断', `
+      <div>${detail}</div>
+      <div style="margin-top:10px;color:#64748b;font-size:12px">
+        错误类型: <b>${e.name}</b><br>${(e.message||'').slice(0,150)}
+      </div>
+      <div class="qq">请确认工具栏右侧有"v6"小字(最新版);若没有,请重启 start.bat 并按 Ctrl+F5 强制刷新页面。</div>`);
+  }
+}
+
+$('#btnCamStart').onclick=()=>startCamera({});
+$('#btnCamStop').onclick=()=>stopCamera();
+
+/* ---- 翻转按钮: 手机=前后摄像头切换;电脑=轮换可用设备 ---- */
+$('#btnCamFlip').onclick=async()=>{
+  if(!camStream){ toast('请先开启摄像头'); return; }
+  const settings=camTrack() ? camTrack().getSettings() : {};
+  if(settings.facingMode==='environment' || settings.facingMode==='user'){
+    const newFacing = settings.facingMode==='environment' ? 'user' : 'environment';
+    toast(newFacing==='user' ? '切换到前置摄像头…' : '切换到后置摄像头…');
+    await startCamera({facing:newFacing});
+    return;
+  }
+  // 无 facing 信息(常见于电脑/iOS): 轮换可用设备
+  const opts=[...camSelect.options].filter(o=>!o.disabled && o.value);
+  if(opts.length>1){
+    const idx=opts.findIndex(o=>o.value===camSelect.value);
+    const next=opts[(idx+1)%opts.length];
+    toast('切换到: '+next.textContent);
+    await startCamera({deviceId: next.value});
+  }else{
+    toast('当前只有 1 个可用摄像头,无法切换');
+  }
+};
+
+$('#camSelect').onchange=async()=>{
+  if(camStream && camSelect.value){
+    await startCamera({deviceId:camSelect.value});
+  }
+};
+
+function stopCamera(silent){
+  if(camTimer){clearInterval(camTimer);camTimer=null}
+  if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}
+  camVideo.srcObject=null;
+  camLayer.style.display='none';
+  if(!silent) $('#empty').style.display='flex';
+  $('#btnCamStart').disabled=false;
+  $('#btnCamStop').disabled=true;
+  $('#btnCamFlip').disabled=true;
+  $('#camFps').textContent='-';
+  blackFrames=0;
+}
+
+function showBlackDiag(avgLum){
+  openModal('摄像头画面为黑色 — 自动诊断', `
+    <div>摄像头已连接且正在采集(已检测 ${camCount} 帧),但画面平均亮度仅 <b>${avgLum.toFixed(1)}/255</b>,接近全黑。请按顺序排查:</div>
+    <div style="margin-top:10px"><b>① 物理隐私开关 / 遮挡滑片</b><br>
+    很多笔记本摄像头旁有物理拨片(或键盘 Fn+摄像头键),请拨到<b>开启</b>位置。这是最常见原因。</div>
+    <div style="margin-top:8px"><b>② Windows 相机效果</b><br>
+    屏幕上弹出的"相机效果"面板(工作室效果/背景效果/眼神交流/自动取景)——若开启了<b>背景效果</b>,画面会被替换成纯色背景。
+    关闭:Windows 设置 → 蓝牙和其他设备 → 相机 → 相关设置,把工作室效果/背景效果/眼神交流/自动取景全部关闭。</div>
+    <div style="margin-top:8px"><b>③ 其他程序占用</b><br>
+    关闭微信/腾讯会议/相机App等,点「停止」再「开启摄像头」。</div>
+    <div class="qq">终极验证:打开 Windows 自带「相机」App——若那里也是黑的,是物理遮挡/驱动问题,与本项目代码无关;若能看见画面,回来重新点「开启摄像头」。</div>`);
+  blackFrames=0;  // 重置计数避免反复弹窗
+}
+
+function startCamDetect(){
+  if(camTimer)clearInterval(camTimer);
+  camTimer = setInterval(async()=>{
+    if(camBusy || !camStream || camVideo.readyState<2)return;
+    camBusy=true;
+    try{
+      const vw=camVideo.videoWidth, vh=camVideo.videoHeight;
+      if(!vw)return;
+      // 抽帧送检(缩到640)
+      const tmp=document.createElement('canvas');
+      const ratio=vw/vh;
+      tmp.width=640; tmp.height=Math.round(640/ratio);
+      const tctx=tmp.getContext('2d', {willReadFrequently:true});
+      tctx.drawImage(camVideo,0,0,tmp.width,tmp.height);
+
+      // ---- 黑屏检测: 采样顶部区域平均亮度 ----
+      const sampleRows=Math.min(40,tmp.height);
+      const sample=tctx.getImageData(0,0,tmp.width,sampleRows).data;
+      let lumSum=0,px=0;
+      for(let i=0;i<sample.length;i+=4){
+        lumSum+=sample[i]*0.299+sample[i+1]*0.587+sample[i+2]*0.114;px++}
+      const avgLum=lumSum/px;
+      if(avgLum<5){
+        blackFrames++;
+        if(blackFrames>=5){
+          // v6: 先尝试自动换一个摄像头(自愈),不行再弹诊断
+          if(!autoSwitched){
+            const others=[...camSelect.options].filter(o=>!o.disabled && o.value && o.value!==camSelect.value);
+            if(others.length){
+              autoSwitched=true;
+              toast('画面全黑,自动切换摄像头: '+others[0].textContent, 4000);
+              startCamera({deviceId: others[0].value});
+              return;
+            }
+          }
+          showBlackDiag(avgLum);
+          blackFrames=0;
+        }
+      }else{
+        blackFrames=0;
+      }
+
+      const dataUrl=tmp.toDataURL('image/jpeg',0.85);
+      const v=await detectFrame(dataUrl, $('#thresh')?+$('#thresh').value:0.35);
+      lastVerdict=v;
+      renderVerdict(v);
+      // 检测框画在覆盖透明画布上(视频元素自己显示画面)
+      camBoxCtx.clearRect(0,0,vw,vh);
+      drawBoxesOn(camBoxCtx, vw, vh, v);
+      $('#legend').style.display='flex';
+      camCount++;
+      const el=(Date.now()-camT0)/1000;
+      $('#camFps').textContent = `已检测 ${camCount} 帧 · ${(camCount/el).toFixed(1)} 帧/秒`;
+    }catch(e){console.warn('摄像头检测失败',e)}
+    finally{camBusy=false}
+  }, 1000);  // 每秒一帧(推理约245ms,留余量)
+}
+
+
+/* ================= 模式四: 批量分析 ================= */
+let batchResults = [];
+
+$('#btnBatchSelect').onclick=()=>$('#batchInput').click();
+$('#batchInput').onchange=e=>{
+  const files=[...e.target.files];
+  if(!files.length)return;
+  runBatch(files);
+};
+
+async function runBatch(files){
+  batchResults=[];
+  $('#btnExportCsv').disabled=true;
+  $('#btnExportJson').disabled=true;
+  $('#batchProgress').style.display='block';
+
+  for(let i=0;i<files.length;i++){
+    const f=files[i];
+    $('#batchTxt').textContent=`正在检测 ${i+1}/${files.length}: ${f.name.slice(0,24)}…`;
+    const pct=Math.round((i)/files.length*100);
+    $('#batchFill').style.width=pct+'%';
+    $('#batchPct').textContent=pct+'%';
+    $('#loading').style.display='flex';
+    $('#loadText').textContent=`批量检测中 ${i+1}/${files.length}`;
+
+    try{
+      const dataUrl=await readFile(f);
+      const v=await detectFrame(dataUrl, 0.35);
+      batchResults.push({
+        filename: f.name,
+        level: v.level,
+        level_cn: v.level_cn,
+        ebike: v.counts.ebike,
+        bicycle: v.counts.bicycle,
+        person: v.counts.person,
+        max_conf: v.detections.length ?
+          Math.round(Math.max(...v.detections.map(d=>d.conf))*100)+'%' : '-',
+        infer_ms: v.infer_ms,
+      });
+    }catch(err){
+      batchResults.push({filename:f.name, level:'error', level_cn:'检测失败',
+        ebike:'-',bicycle:'-',person:'-',max_conf:'-',infer_ms:0});
+    }
+    $('#loading').style.display='none';
+  }
+
+  const pct=100;
+  $('#batchFill').style.width='100%';
+  $('#batchPct').textContent='100%';
+  const high= batchResults.filter(r=>r.level==='high').length;
+  $('#batchTxt').textContent=`完成: ${files.length} 张,高风险 ${high} 张`;
+  $('#btnExportCsv').disabled=false;
+  $('#btnExportJson').disabled=false;
+
+  renderBatchTable(batchResults);
+  toast(`批量检测完成: ${files.length} 张,高风险 ${high} 张`);
+}
+
+function readFile(file){
+  return new Promise((res,rej)=>{
+    const fr=new FileReader();
+    fr.onload=()=>res(fr.result);
+    fr.onerror=rej;
+    fr.readAsDataURL(file);
+  });
+}
+
+function renderBatchTable(results){
+  const total=results.length;
+  const high=results.filter(r=>r.level==='high').length;
+  const low=results.filter(r=>r.level==='low').length;
+  const safe=total-high-low;
+  const avgMs = total? Math.round(results.reduce((s,r)=>s+(r.infer_ms||0),0)/total):0;
+
+  const rows=results.map(r=>`<tr>
+    <td title="${r.filename}">${r.filename.length>22?r.filename.slice(0,20)+'…':r.filename}</td>
+    <td><span class="lvBadge ${r.level}">${r.level_cn}</span></td>
+    <td>${r.ebike}</td><td>${r.bicycle}</td><td>${r.person}</td>
+    <td>${r.max_conf}</td><td>${r.infer_ms}ms</td></tr>`).join('');
+
+  $('#verdictBox').innerHTML=`
+    <div class="lv safe">
+      <div class="emoji">${ICON('check')}</div>
+      <div><div class="name">批量分析完成</div>
+        <div class="sum">共 ${total} 张 · 高风险 ${high} · 低风险 ${low} · 安全 ${safe} · 平均 ${avgMs}ms/张</div></div>
+    </div>
+    <div class="sec">
+      <div class="st">${ICON('stack')}检测结果汇总(阈值35%)</div>
+      <div style="overflow-x:auto">
+      <table class="batchTable">
+        <thead><tr><th>文件名</th><th>判定</th><th>电动车</th><th>自行车</th><th>乘客</th><th>最高置信度</th><th>耗时</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+    </div>
+    <div class="sec" style="margin-top:10px">
+      <div class="st">${ICON('download')}导出</div>
+      <div class="actions">
+        <button class="act" onclick="exportCsv()"><b>${ICON('download')}CSV(Excel可用)</b>逗号分隔,含全部字段</button>
+        <button class="act" onclick="exportJson()"><b>${ICON('download')}JSON</b>结构化数据,程序可读</button>
+      </div>
+    </div>`;
+}
+
+window.exportCsv=()=>{
+  if(!batchResults.length)return;
+  const head='文件名,判定,电动车数,自行车数,乘客数,最高置信度,推理耗时ms\n';
+  const rows=batchResults.map(r=>`${r.filename},${r.level_cn},${r.ebike},${r.bicycle},${r.person},${r.max_conf},${r.infer_ms}`).join('\n');
+  download('\ufeff'+head+rows, '批量检测结果.csv', 'text/csv');
+};
+window.exportJson=()=>{
+  if(!batchResults.length)return;
+  download(JSON.stringify(batchResults,null,2), '批量检测结果.json', 'application/json');
+};
+function download(content, filename, mime){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type:mime+';charset=utf-8'}));
+  a.download=filename; a.click();
+  setTimeout(()=>URL.revokeObjectURL(a.href),500);
+}
+
+/* ================= 键盘 ================= */
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+</script>
+</body>
+</html>

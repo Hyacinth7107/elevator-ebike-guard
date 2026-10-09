@@ -1,0 +1,10 @@
+# ElevatorGuard 运行依赖
+# 安装: pip install -r requirements.txt
+ultralytics==8.4.137
+torch>=2.0
+torchvision>=0.15
+onnxruntime>=1.18
+opencv-python>=4.10
+numpy>=1.26
+matplotlib>=3.8
+grad-cam==1.5.7

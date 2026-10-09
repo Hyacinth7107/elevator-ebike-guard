@@ -1,0 +1,22 @@
+# ============================================================
+# 数据集配置模板 —— 复现训练时使用
+# ============================================================
+# 1. 获取数据集: Roboflow Universe 作者 "elevator" 的
+#    「电梯内自行车与电动车目标检测数据集」(YOLO 格式, 28,312 张)
+#    train 26,414 / valid 1,276 / test 622; 类别: 0=bicycle, 1=ebike
+# 2. 解压到本目录下的 dataset/ 文件夹
+# 3. 把 path 改成解压后的实际路径(绝对路径或相对本文件均可)
+#
+# 提示: 训练时使用了 8,000 张随机子集(固定 seed=42)以加速
+#       Windows 数据加载, 详见 training/prepare_subset.py
+# ============================================================
+
+path: ../dataset/elevator-bike-ebike   # <-- 改成你的数据集路径
+
+train: train/images
+val: valid/images
+test: test/images
+
+nc: 2
+
+names: ['bicycle', 'ebike']

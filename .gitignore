@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+Thumbs.db
+*.log
+.temp/
+dataset/
+runs/
+cert.pem
+key.pem
+openssl_san.cnf
